@@ -1,0 +1,301 @@
+import { useState, useCallback } from "react";
+import { useDropzone } from "react-dropzone";
+import { Upload, Link as LinkIcon, FileVideo, FileAudio, Image, X, CheckCircle2, AlertTriangle, XCircle, Loader2, Info } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
+import { motion, AnimatePresence } from "framer-motion";
+import { Navbar } from "@/components/Navbar";
+import { Footer } from "@/components/Footer";
+
+type Step = "upload" | "processing" | "result";
+type Verdict = "genuine" | "deepfake" | "suspicious";
+
+const mockResult = {
+  verdict: "deepfake" as Verdict,
+  confidence: 92,
+  details: {
+    facialArtifacts: "Inconsistent eye blinking patterns detected at frames 120-145",
+    lipSync: "Audio-visual mismatch: 340ms delay in lip synchronization",
+    voiceAnalysis: "Voice spectral analysis shows synthetic generation markers",
+    metadata: "EXIF data stripped, creation tool signature: StyleGAN2-based",
+  },
+  verificationId: "VRF-2026-04-00847",
+};
+
+const processingSteps = [
+  "Uploading content...",
+  "Extracting visual frames...",
+  "Analyzing facial features...",
+  "Checking audio patterns...",
+  "Cross-referencing database...",
+  "Generating forensic report...",
+];
+
+export default function Verify() {
+  const [step, setStep] = useState<Step>("upload");
+  const [file, setFile] = useState<File | null>(null);
+  const [url, setUrl] = useState("");
+  const [contentType, setContentType] = useState("");
+  const [description, setDescription] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [processingStep, setProcessingStep] = useState(0);
+
+  const onDrop = useCallback((accepted: File[]) => {
+    if (accepted.length > 0) {
+      setFile(accepted[0]);
+      const ext = accepted[0].name.split('.').pop()?.toLowerCase();
+      if (["mp4", "avi", "mov", "webm"].includes(ext || "")) setContentType("video");
+      else if (["mp3", "wav", "m4a", "ogg"].includes(ext || "")) setContentType("audio");
+      else setContentType("image");
+    }
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      "video/*": [".mp4", ".avi", ".mov", ".webm"],
+      "audio/*": [".mp3", ".wav", ".m4a", ".ogg"],
+      "image/*": [".jpg", ".jpeg", ".png", ".webp"],
+    },
+    maxFiles: 1,
+    maxSize: 100 * 1024 * 1024,
+  });
+
+  const handleSubmit = () => {
+    if (!file && !url) return;
+    setStep("processing");
+    setProgress(0);
+    setProcessingStep(0);
+
+    const interval = setInterval(() => {
+      setProgress((p) => {
+        const next = p + 2;
+        setProcessingStep(Math.min(Math.floor(next / 17), processingSteps.length - 1));
+        if (next >= 100) {
+          clearInterval(interval);
+          setTimeout(() => setStep("result"), 500);
+        }
+        return Math.min(next, 100);
+      });
+    }, 80);
+  };
+
+  const verdictConfig: Record<Verdict, { icon: typeof CheckCircle2; label: string; color: string; bg: string }> = {
+    genuine: { icon: CheckCircle2, label: "Genuine Content", color: "text-genuine", bg: "bg-genuine/10 border-genuine/30" },
+    deepfake: { icon: XCircle, label: "Deepfake Detected", color: "text-deepfake", bg: "bg-deepfake/10 border-deepfake/30" },
+    suspicious: { icon: AlertTriangle, label: "Suspicious Content", color: "text-suspicious", bg: "bg-suspicious/10 border-suspicious/30" },
+  };
+
+  const resetForm = () => {
+    setStep("upload");
+    setFile(null);
+    setUrl("");
+    setContentType("");
+    setDescription("");
+    setConsent(false);
+    setProgress(0);
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+
+      <main className="pt-24 pb-16 px-4">
+        <div className="container mx-auto max-w-3xl">
+          <div className="text-center mb-10">
+            <h1 className="font-heading text-3xl md:text-4xl font-bold mb-3">Verify Political Content</h1>
+            <p className="text-muted-foreground">Upload suspicious content to check for deepfake manipulation</p>
+          </div>
+
+          <AnimatePresence mode="wait">
+            {step === "upload" && (
+              <motion.div key="upload" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+                {/* Upload zone */}
+                <div
+                  {...getRootProps()}
+                  className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all mb-6 ${
+                    isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <input {...getInputProps()} />
+                  {file ? (
+                    <div className="flex items-center justify-center gap-3">
+                      {contentType === "video" ? <FileVideo className="w-8 h-8 text-primary" /> :
+                       contentType === "audio" ? <FileAudio className="w-8 h-8 text-primary" /> :
+                       <Image className="w-8 h-8 text-primary" />}
+                      <div className="text-left">
+                        <p className="text-foreground font-medium">{file.name}</p>
+                        <p className="text-sm text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); setFile(null); }} className="ml-4 text-muted-foreground hover:text-destructive">
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-foreground font-medium mb-1">Drop your file here or click to browse</p>
+                      <p className="text-sm text-muted-foreground">Video, Audio, or Image — up to 100MB</p>
+                    </>
+                  )}
+                </div>
+
+                {/* URL input */}
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-sm text-muted-foreground">OR</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                <div className="relative mb-8">
+                  <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Paste YouTube, Facebook, Instagram, or Twitter URL"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    className="pl-10 bg-card border-border"
+                  />
+                </div>
+
+                {/* Form fields */}
+                <div className="space-y-4 mb-8">
+                  <Select value={contentType} onValueChange={setContentType}>
+                    <SelectTrigger className="bg-card border-border">
+                      <SelectValue placeholder="Content Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="video">Video</SelectItem>
+                      <SelectItem value="audio">Audio</SelectItem>
+                      <SelectItem value="image">Image</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Input placeholder="Politician Name (optional)" className="bg-card border-border" />
+                    <Select>
+                      <SelectTrigger className="bg-card border-border">
+                        <SelectValue placeholder="State / Region" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["Andhra Pradesh","Bihar","Delhi","Gujarat","Karnataka","Kerala","Madhya Pradesh","Maharashtra","Punjab","Rajasthan","Tamil Nadu","Telangana","Uttar Pradesh","West Bengal"].map(s => (
+                          <SelectItem key={s} value={s.toLowerCase().replace(/ /g,"-")}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Textarea placeholder="Additional context or description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} className="bg-card border-border" rows={3} />
+
+                  <div className="flex items-start gap-3">
+                    <Checkbox id="consent" checked={consent} onCheckedChange={(c) => setConsent(c === true)} className="mt-0.5" />
+                    <label htmlFor="consent" className="text-sm text-muted-foreground cursor-pointer">
+                      I consent to the processing of this content for deepfake detection purposes. Submitted content is handled per ECI data protection guidelines.
+                    </label>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleSubmit}
+                  disabled={(!file && !url) || !consent}
+                  size="lg"
+                  className="w-full gradient-primary text-primary-foreground font-semibold shadow-glow disabled:opacity-50"
+                >
+                  Analyze Content
+                </Button>
+              </motion.div>
+            )}
+
+            {step === "processing" && (
+              <motion.div key="processing" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="text-center py-16">
+                <Loader2 className="w-16 h-16 text-primary mx-auto mb-6 animate-spin" />
+                <h2 className="font-heading text-2xl font-bold mb-2">Analyzing Content</h2>
+                <p className="text-muted-foreground mb-8">{processingSteps[processingStep]}</p>
+                <div className="max-w-md mx-auto mb-4">
+                  <Progress value={progress} className="h-3" />
+                </div>
+                <p className="text-sm text-muted-foreground">{progress}% complete</p>
+
+                <div className="mt-10 p-4 rounded-xl bg-card border border-border max-w-sm mx-auto">
+                  <Info className="w-5 h-5 text-primary mb-2 mx-auto" />
+                  <p className="text-sm text-muted-foreground">
+                    <span className="text-foreground font-medium">Did you know?</span> Over 500,000 deepfake videos were created globally in 2025, with political content being the fastest growing category.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+
+            {step === "result" && (
+              <motion.div key="result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+                {/* Verdict Card */}
+                {(() => {
+                  const vc = verdictConfig[mockResult.verdict];
+                  const VerdictIcon = vc.icon;
+                  return (
+                    <div className={`rounded-xl border p-8 text-center mb-8 ${vc.bg}`}>
+                      <VerdictIcon className={`w-16 h-16 mx-auto mb-4 ${vc.color}`} />
+                      <h2 className={`font-heading text-3xl font-bold mb-2 ${vc.color}`}>{vc.label}</h2>
+                      <p className="text-muted-foreground mb-6">Verification ID: {mockResult.verificationId}</p>
+
+                      {/* Confidence Gauge */}
+                      <div className="max-w-xs mx-auto mb-2">
+                        <div className="flex justify-between text-sm text-muted-foreground mb-1">
+                          <span>Confidence Score</span>
+                          <span className={vc.color}>{mockResult.confidence}%</span>
+                        </div>
+                        <div className="h-4 rounded-full bg-muted overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${mockResult.confidence}%` }}
+                            transition={{ duration: 1, ease: "easeOut" }}
+                            className={`h-full rounded-full ${
+                              mockResult.verdict === "genuine" ? "bg-genuine" :
+                              mockResult.verdict === "deepfake" ? "bg-deepfake" : "bg-suspicious"
+                            }`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Detection Details */}
+                <div className="rounded-xl border border-border bg-card p-6 mb-8">
+                  <h3 className="font-heading font-semibold text-lg mb-4 text-foreground">Detection Details</h3>
+                  <div className="space-y-4">
+                    {Object.entries(mockResult.details).map(([key, value]) => (
+                      <div key={key} className="p-4 rounded-lg bg-secondary/50">
+                        <p className="text-sm font-medium text-primary mb-1 capitalize">
+                          {key.replace(/([A-Z])/g, ' $1').trim()}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button className="flex-1 gradient-primary text-primary-foreground font-semibold">
+                    Download Report (PDF)
+                  </Button>
+                  <Button variant="outline" className="flex-1 border-border text-foreground">
+                    Share Verification Certificate
+                  </Button>
+                  <Button variant="ghost" onClick={resetForm} className="flex-1 text-muted-foreground">
+                    Verify Another
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
