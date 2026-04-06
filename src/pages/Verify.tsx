@@ -1,10 +1,9 @@
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, Link as LinkIcon, FileVideo, FileAudio, Image, X, CheckCircle2, AlertTriangle, XCircle, Loader2, Info } from "lucide-react";
+import { Upload, Link as LinkIcon, FileVideo, FileAudio, Image, FileText, X, CheckCircle2, AlertTriangle, XCircle, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,6 +12,7 @@ import { Footer } from "@/components/Footer";
 
 type Step = "upload" | "processing" | "result";
 type Verdict = "genuine" | "deepfake" | "suspicious";
+type ContentTab = "image" | "video" | "audio" | "text" | "url";
 
 const mockResult = {
   verdict: "deepfake" as Verdict,
@@ -35,39 +35,58 @@ const processingSteps = [
   "Generating forensic report...",
 ];
 
+const tabs: { key: ContentTab; label: string; icon: typeof Image }[] = [
+  { key: "image", label: "Image", icon: Image },
+  { key: "video", label: "Video", icon: FileVideo },
+  { key: "audio", label: "Audio", icon: FileAudio },
+  { key: "text", label: "Text", icon: FileText },
+  { key: "url", label: "URL", icon: LinkIcon },
+];
+
+const acceptMap: Record<string, Record<string, string[]>> = {
+  image: { "image/*": [".jpg", ".jpeg", ".png", ".webp"] },
+  video: { "video/*": [".mp4", ".avi", ".mov", ".webm"] },
+  audio: { "audio/*": [".mp3", ".wav", ".m4a", ".ogg"] },
+};
+
+const dropzoneHints: Record<string, string> = {
+  image: "JPG, PNG, or WebP — up to 100MB",
+  video: "MP4, AVI, MOV, or WebM — up to 100MB",
+  audio: "MP3, WAV, M4A, or OGG — up to 100MB",
+};
+
 export default function Verify() {
   const [step, setStep] = useState<Step>("upload");
+  const [activeTab, setActiveTab] = useState<ContentTab>("image");
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
-  const [contentType, setContentType] = useState("");
+  const [textContent, setTextContent] = useState("");
   const [description, setDescription] = useState("");
   const [consent, setConsent] = useState(false);
   const [progress, setProgress] = useState(0);
   const [processingStep, setProcessingStep] = useState(0);
 
   const onDrop = useCallback((accepted: File[]) => {
-    if (accepted.length > 0) {
-      setFile(accepted[0]);
-      const ext = accepted[0].name.split('.').pop()?.toLowerCase();
-      if (["mp4", "avi", "mov", "webm"].includes(ext || "")) setContentType("video");
-      else if (["mp3", "wav", "m4a", "ogg"].includes(ext || "")) setContentType("audio");
-      else setContentType("image");
-    }
+    if (accepted.length > 0) setFile(accepted[0]);
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: {
-      "video/*": [".mp4", ".avi", ".mov", ".webm"],
-      "audio/*": [".mp3", ".wav", ".m4a", ".ogg"],
-      "image/*": [".jpg", ".jpeg", ".png", ".webp"],
-    },
+    accept: acceptMap[activeTab] || {},
     maxFiles: 1,
     maxSize: 100 * 1024 * 1024,
+    disabled: activeTab === "text" || activeTab === "url",
   });
 
+  const canSubmit = () => {
+    if (!consent) return false;
+    if (activeTab === "url") return url.trim().length > 0;
+    if (activeTab === "text") return textContent.trim().length > 0;
+    return file !== null;
+  };
+
   const handleSubmit = () => {
-    if (!file && !url) return;
+    if (!canSubmit()) return;
     setStep("processing");
     setProgress(0);
     setProcessingStep(0);
@@ -95,11 +114,21 @@ export default function Verify() {
     setStep("upload");
     setFile(null);
     setUrl("");
-    setContentType("");
+    setTextContent("");
     setDescription("");
     setConsent(false);
     setProgress(0);
   };
+
+  const switchTab = (tab: ContentTab) => {
+    setActiveTab(tab);
+    setFile(null);
+    setUrl("");
+    setTextContent("");
+  };
+
+  const fileIcon = activeTab === "video" ? FileVideo : activeTab === "audio" ? FileAudio : Image;
+  const FileIcon = fileIcon;
 
   return (
     <div className="min-h-screen bg-background">
@@ -115,80 +144,105 @@ export default function Verify() {
           <AnimatePresence mode="wait">
             {step === "upload" && (
               <motion.div key="upload" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-                {/* Upload zone */}
-                <div
-                  {...getRootProps()}
-                  className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all mb-6 ${
-                    isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <input {...getInputProps()} />
-                  {file ? (
-                    <div className="flex items-center justify-center gap-3">
-                      {contentType === "video" ? <FileVideo className="w-8 h-8 text-primary" /> :
-                       contentType === "audio" ? <FileAudio className="w-8 h-8 text-primary" /> :
-                       <Image className="w-8 h-8 text-primary" />}
-                      <div className="text-left">
-                        <p className="text-foreground font-medium">{file.name}</p>
-                        <p className="text-sm text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                      </div>
-                      <button onClick={(e) => { e.stopPropagation(); setFile(null); }} className="ml-4 text-muted-foreground hover:text-destructive">
-                        <X className="w-5 h-5" />
+                {/* Content type tabs */}
+                <div className="flex rounded-xl bg-secondary border border-border p-1 mb-8 overflow-x-auto">
+                  {tabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        onClick={() => switchTab(tab.key)}
+                        className={`flex-1 min-w-0 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                          isActive
+                            ? "gradient-primary text-primary-foreground shadow-glow"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span className="hidden sm:inline">{tab.label}</span>
                       </button>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-foreground font-medium mb-1">Drop your file here or click to browse</p>
-                      <p className="text-sm text-muted-foreground">Video, Audio, or Image — up to 100MB</p>
-                    </>
-                  )}
+                    );
+                  })}
                 </div>
+
+                {/* File upload zone (image / video / audio) */}
+                {(activeTab === "image" || activeTab === "video" || activeTab === "audio") && (
+                  <div
+                    {...getRootProps()}
+                    className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all mb-6 ${
+                      isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                    }`}
+                  >
+                    <input {...getInputProps()} />
+                    {file ? (
+                      <div className="flex items-center justify-center gap-3">
+                        <FileIcon className="w-8 h-8 text-primary" />
+                        <div className="text-left">
+                          <p className="text-foreground font-medium">{file.name}</p>
+                          <p className="text-sm text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                        </div>
+                        <button onClick={(e) => { e.stopPropagation(); setFile(null); }} className="ml-4 text-muted-foreground hover:text-destructive">
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-foreground font-medium mb-1">
+                          Drop your {activeTab} file here or click to browse
+                        </p>
+                        <p className="text-sm text-muted-foreground">{dropzoneHints[activeTab]}</p>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Text input */}
+                {activeTab === "text" && (
+                  <div className="mb-6">
+                    <Textarea
+                      placeholder="Paste the suspicious text content here (e.g., a political quote, social media post, or news excerpt)..."
+                      value={textContent}
+                      onChange={(e) => setTextContent(e.target.value)}
+                      className="bg-card border-border min-h-[200px]"
+                      rows={8}
+                    />
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Paste text-based political content for AI-generated text detection.
+                    </p>
+                  </div>
+                )}
 
                 {/* URL input */}
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="flex-1 h-px bg-border" />
-                  <span className="text-sm text-muted-foreground">OR</span>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-                <div className="relative mb-8">
-                  <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Paste YouTube, Facebook, Instagram, or Twitter URL"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    className="pl-10 bg-card border-border"
-                  />
-                </div>
-
-                {/* Form fields */}
-                <div className="space-y-4 mb-8">
-                  <Select value={contentType} onValueChange={setContentType}>
-                    <SelectTrigger className="bg-card border-border">
-                      <SelectValue placeholder="Content Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="video">Video</SelectItem>
-                      <SelectItem value="audio">Audio</SelectItem>
-                      <SelectItem value="image">Image</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input placeholder="Politician Name (optional)" className="bg-card border-border" />
-                    <Select>
-                      <SelectTrigger className="bg-card border-border">
-                        <SelectValue placeholder="State / Region" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {["Andhra Pradesh","Bihar","Delhi","Gujarat","Karnataka","Kerala","Madhya Pradesh","Maharashtra","Punjab","Rajasthan","Tamil Nadu","Telangana","Uttar Pradesh","West Bengal"].map(s => (
-                          <SelectItem key={s} value={s.toLowerCase().replace(/ /g,"-")}>{s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                {activeTab === "url" && (
+                  <div className="mb-6">
+                    <div className="relative">
+                      <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Paste YouTube, Facebook, Instagram, or Twitter URL"
+                        value={url}
+                        onChange={(e) => setUrl(e.target.value)}
+                        className="pl-10 bg-card border-border"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Supported: YouTube, Facebook, Instagram, Twitter/X, and WhatsApp forwarded links.
+                    </p>
                   </div>
+                )}
 
-                  <Textarea placeholder="Additional context or description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} className="bg-card border-border" rows={3} />
+                {/* Common form fields */}
+                <div className="space-y-4 mb-8">
+                  <Input placeholder="Politician Name (optional)" className="bg-card border-border" />
+
+                  <Textarea
+                    placeholder="Additional context or description (optional)"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="bg-card border-border"
+                    rows={3}
+                  />
 
                   <div className="flex items-start gap-3">
                     <Checkbox id="consent" checked={consent} onCheckedChange={(c) => setConsent(c === true)} className="mt-0.5" />
@@ -200,7 +254,7 @@ export default function Verify() {
 
                 <Button
                   onClick={handleSubmit}
-                  disabled={(!file && !url) || !consent}
+                  disabled={!canSubmit()}
                   size="lg"
                   className="w-full gradient-primary text-primary-foreground font-semibold shadow-glow disabled:opacity-50"
                 >
@@ -230,7 +284,6 @@ export default function Verify() {
 
             {step === "result" && (
               <motion.div key="result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-                {/* Verdict Card */}
                 {(() => {
                   const vc = verdictConfig[mockResult.verdict];
                   const VerdictIcon = vc.icon;
@@ -240,7 +293,6 @@ export default function Verify() {
                       <h2 className={`font-heading text-3xl font-bold mb-2 ${vc.color}`}>{vc.label}</h2>
                       <p className="text-muted-foreground mb-6">Verification ID: {mockResult.verificationId}</p>
 
-                      {/* Confidence Gauge */}
                       <div className="max-w-xs mx-auto mb-2">
                         <div className="flex justify-between text-sm text-muted-foreground mb-1">
                           <span>Confidence Score</span>
@@ -262,7 +314,6 @@ export default function Verify() {
                   );
                 })()}
 
-                {/* Detection Details */}
                 <div className="rounded-xl border border-border bg-card p-6 mb-8">
                   <h3 className="font-heading font-semibold text-lg mb-4 text-foreground">Detection Details</h3>
                   <div className="space-y-4">
@@ -277,7 +328,6 @@ export default function Verify() {
                   </div>
                 </div>
 
-                {/* Actions */}
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Button className="flex-1 gradient-primary text-primary-foreground font-semibold">
                     Download Report (PDF)
