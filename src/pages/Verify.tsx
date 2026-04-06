@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
+import axios from "axios";
 import { useDropzone } from "react-dropzone";
 import { Upload, Link as LinkIcon, FileVideo, FileAudio, Image, FileText, X, CheckCircle2, AlertTriangle, XCircle, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,16 +15,15 @@ type Step = "upload" | "processing" | "result";
 type Verdict = "genuine" | "deepfake" | "suspicious";
 type ContentTab = "image" | "video" | "audio" | "text" | "url";
 
-const mockResult = {
-  verdict: "deepfake" as Verdict,
-  confidence: 92,
+const WEBHOOK_URL = "https://ggggggg4rwefsdf.app.n8n.cloud/webhook-test/detect";
+
+const fallbackResult = {
+  verdict: "suspicious" as Verdict,
+  confidence: 0,
   details: {
-    facialArtifacts: "Inconsistent eye blinking patterns detected at frames 120-145",
-    lipSync: "Audio-visual mismatch: 340ms delay in lip synchronization",
-    voiceAnalysis: "Voice spectral analysis shows synthetic generation markers",
-    metadata: "EXIF data stripped, creation tool signature: StyleGAN2-based",
+    error: "Could not reach the analysis server. Please try again later.",
   },
-  verificationId: "VRF-2026-04-00847",
+  verificationId: "N/A",
 };
 
 const processingSteps = [
@@ -61,10 +61,18 @@ export default function Verify() {
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState("");
   const [textContent, setTextContent] = useState("");
+  const [politicianName, setPoliticianName] = useState("");
   const [description, setDescription] = useState("");
   const [consent, setConsent] = useState(false);
   const [progress, setProgress] = useState(0);
   const [processingStep, setProcessingStep] = useState(0);
+  const [result, setResult] = useState<{
+    verdict: Verdict;
+    confidence: number;
+    details: Record<string, string>;
+    verificationId: string;
+  } | null>(null);
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const onDrop = useCallback((accepted: File[]) => {
     if (accepted.length > 0) setFile(accepted[0]);
@@ -85,23 +93,65 @@ export default function Verify() {
     return file !== null;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit()) return;
     setStep("processing");
     setProgress(0);
     setProcessingStep(0);
 
-    const interval = setInterval(() => {
+    // Animate progress to ~90% while waiting for API
+    progressRef.current = setInterval(() => {
       setProgress((p) => {
-        const next = p + 2;
-        setProcessingStep(Math.min(Math.floor(next / 17), processingSteps.length - 1));
-        if (next >= 100) {
-          clearInterval(interval);
-          setTimeout(() => setStep("result"), 500);
+        const next = p + 1;
+        setProcessingStep(Math.min(Math.floor(next / 15), processingSteps.length - 2));
+        if (next >= 90) {
+          if (progressRef.current) clearInterval(progressRef.current);
+          return 90;
         }
-        return Math.min(next, 100);
+        return next;
       });
-    }, 80);
+    }, 120);
+
+    try {
+      const formData = new FormData();
+      formData.append("contentType", activeTab);
+      if (politicianName) formData.append("politicianName", politicianName);
+      if (description) formData.append("description", description);
+
+      if (activeTab === "url") {
+        formData.append("url", url);
+      } else if (activeTab === "text") {
+        formData.append("text", textContent);
+      } else if (file) {
+        formData.append("file", file, file.name);
+      }
+
+      const response = await axios.post(WEBHOOK_URL, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      // Finish progress
+      if (progressRef.current) clearInterval(progressRef.current);
+      setProgress(100);
+      setProcessingStep(processingSteps.length - 1);
+
+      // Parse response — adapt to whatever shape n8n returns
+      const data = response.data;
+      const parsed = {
+        verdict: (data?.verdict || "suspicious") as Verdict,
+        confidence: Number(data?.confidence) || 0,
+        details: data?.details || { summary: JSON.stringify(data) },
+        verificationId: data?.verificationId || `VRF-${Date.now()}`,
+      };
+      setResult(parsed);
+      setTimeout(() => setStep("result"), 500);
+    } catch (err) {
+      console.error("Webhook error:", err);
+      if (progressRef.current) clearInterval(progressRef.current);
+      setProgress(100);
+      setResult(fallbackResult);
+      setTimeout(() => setStep("result"), 500);
+    }
   };
 
   const verdictConfig: Record<Verdict, { icon: typeof CheckCircle2; label: string; color: string; bg: string }> = {
@@ -115,9 +165,11 @@ export default function Verify() {
     setFile(null);
     setUrl("");
     setTextContent("");
+    setPoliticianName("");
     setDescription("");
     setConsent(false);
     setProgress(0);
+    setResult(null);
   };
 
   const switchTab = (tab: ContentTab) => {
@@ -234,7 +286,7 @@ export default function Verify() {
 
                 {/* Common form fields */}
                 <div className="space-y-4 mb-8">
-                  <Input placeholder="Politician Name (optional)" className="bg-card border-border" />
+                  <Input placeholder="Politician Name (optional)" value={politicianName} onChange={(e) => setPoliticianName(e.target.value)} className="bg-card border-border" />
 
                   <Textarea
                     placeholder="Additional context or description (optional)"
@@ -282,30 +334,30 @@ export default function Verify() {
               </motion.div>
             )}
 
-            {step === "result" && (
+            {step === "result" && result && (
               <motion.div key="result" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
                 {(() => {
-                  const vc = verdictConfig[mockResult.verdict];
+                  const vc = verdictConfig[result.verdict];
                   const VerdictIcon = vc.icon;
                   return (
                     <div className={`rounded-xl border p-8 text-center mb-8 ${vc.bg}`}>
                       <VerdictIcon className={`w-16 h-16 mx-auto mb-4 ${vc.color}`} />
                       <h2 className={`font-heading text-3xl font-bold mb-2 ${vc.color}`}>{vc.label}</h2>
-                      <p className="text-muted-foreground mb-6">Verification ID: {mockResult.verificationId}</p>
+                      <p className="text-muted-foreground mb-6">Verification ID: {result.verificationId}</p>
 
                       <div className="max-w-xs mx-auto mb-2">
                         <div className="flex justify-between text-sm text-muted-foreground mb-1">
                           <span>Confidence Score</span>
-                          <span className={vc.color}>{mockResult.confidence}%</span>
+                          <span className={vc.color}>{result.confidence}%</span>
                         </div>
                         <div className="h-4 rounded-full bg-muted overflow-hidden">
                           <motion.div
                             initial={{ width: 0 }}
-                            animate={{ width: `${mockResult.confidence}%` }}
+                            animate={{ width: `${result.confidence}%` }}
                             transition={{ duration: 1, ease: "easeOut" }}
                             className={`h-full rounded-full ${
-                              mockResult.verdict === "genuine" ? "bg-genuine" :
-                              mockResult.verdict === "deepfake" ? "bg-deepfake" : "bg-suspicious"
+                              result.verdict === "genuine" ? "bg-genuine" :
+                              result.verdict === "deepfake" ? "bg-deepfake" : "bg-suspicious"
                             }`}
                           />
                         </div>
@@ -317,12 +369,12 @@ export default function Verify() {
                 <div className="rounded-xl border border-border bg-card p-6 mb-8">
                   <h3 className="font-heading font-semibold text-lg mb-4 text-foreground">Detection Details</h3>
                   <div className="space-y-4">
-                    {Object.entries(mockResult.details).map(([key, value]) => (
+                    {Object.entries(result.details).map(([key, value]) => (
                       <div key={key} className="p-4 rounded-lg bg-secondary/50">
                         <p className="text-sm font-medium text-primary mb-1 capitalize">
                           {key.replace(/([A-Z])/g, ' $1').trim()}
                         </p>
-                        <p className="text-sm text-muted-foreground">{value}</p>
+                        <p className="text-sm text-muted-foreground">{String(value)}</p>
                       </div>
                     ))}
                   </div>
