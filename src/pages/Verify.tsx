@@ -286,7 +286,7 @@ export default function Verify() {
 
                 {/* Common form fields */}
                 <div className="space-y-4 mb-8">
-                  <Input placeholder="Politician Name (optional)" className="bg-card border-border" />
+                  <Input placeholder="Politician Name (optional)" value={politicianName} onChange={(e) => setPoliticianName(e.target.value)} className="bg-card border-border" />
 
                   <Textarea
                     placeholder="Additional context or description (optional)"
