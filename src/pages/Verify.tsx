@@ -15,7 +15,7 @@ type Step = "upload" | "processing" | "result";
 type Verdict = "genuine" | "deepfake" | "suspicious";
 type ContentTab = "image" | "video" | "audio" | "text" | "url";
 
-const WEBHOOK_URL = "https://ggggggg4rwefsdf.app.n8n.cloud/webhook-test/detect";
+const WEBHOOK_URL = "https://ggggggg4rwefsdf.app.n8n.cloud/webhook/detect";
 
 const fallbackResult = {
   verdict: "suspicious" as Verdict,
