@@ -16,7 +16,7 @@ const features = [
   { icon: Upload, title: "Upload & Verify", desc: "Submit suspicious political content — video, audio, or images — for instant AI analysis." },
   { icon: Eye, title: "Real-Time Monitoring", desc: "Track deepfake incidents across India with live maps and incident feeds." },
   { icon: BarChart3, title: "Analytics & Insights", desc: "Comprehensive dashboards showing trends, targeted politicians, and viral spread." },
-  { icon: Globe, title: "15+ Languages", desc: "Full support for Hindi, Tamil, Telugu, Bengali, and more regional languages." },
+  { icon: Globe, title: "5+ Languages", desc: "Full support for Hindi, Tamil, Telugu, Bengali, and more regional languages." },
   { icon: Zap, title: "Instant Alerts", desc: "Get notified when deepfakes targeting your constituency go viral." },
   { icon: Users, title: "Civic Participation", desc: "Earn badges by reporting deepfakes and protecting election integrity." },
 ];
