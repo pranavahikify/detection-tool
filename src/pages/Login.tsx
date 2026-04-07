@@ -15,14 +15,28 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
-      toast.error(error.message);
-    } else {
+    const isPreviewAuth = /lovableproject\.com|id-preview--/.test(window.location.hostname);
+
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
       toast.success("Signed in successfully!");
       navigate("/");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Sign in failed";
+      toast.error(
+        isPreviewAuth && /failed to fetch/i.test(message)
+          ? "Preview auth is failing right now. Please use the published app to sign in."
+          : message,
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
