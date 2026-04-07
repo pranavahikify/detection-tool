@@ -382,7 +382,49 @@ export default function Verify() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <Button className="flex-1 gradient-primary text-primary-foreground font-semibold">
+                  <Button
+                    className="flex-1 gradient-primary text-primary-foreground font-semibold"
+                    onClick={() => {
+                      if (!result) return;
+                      const pdf = new jsPDF();
+                      const vc = verdictConfig[result.verdict];
+                      pdf.setFontSize(22);
+                      pdf.text("Deepfake Detection Report", 20, 25);
+                      pdf.setFontSize(10);
+                      pdf.setTextColor(120, 120, 120);
+                      pdf.text(`Verification ID: ${result.verificationId}`, 20, 34);
+                      pdf.text(`Generated: ${new Date().toLocaleString()}`, 20, 40);
+                      pdf.setDrawColor(200, 200, 200);
+                      pdf.line(20, 45, 190, 45);
+                      pdf.setFontSize(16);
+                      pdf.setTextColor(0, 0, 0);
+                      pdf.text("Verdict", 20, 56);
+                      const verdictColor = result.verdict === "genuine" ? [34,197,94] : result.verdict === "deepfake" ? [239,68,68] : [234,179,8];
+                      pdf.setTextColor(verdictColor[0], verdictColor[1], verdictColor[2]);
+                      pdf.setFontSize(14);
+                      pdf.text(vc.label, 20, 64);
+                      pdf.setTextColor(0, 0, 0);
+                      pdf.setFontSize(12);
+                      pdf.text(`Confidence: ${result.confidence}%`, 20, 74);
+                      pdf.line(20, 80, 190, 80);
+                      pdf.setFontSize(16);
+                      pdf.text("Detection Details", 20, 92);
+                      let y = 102;
+                      Object.entries(result.details).forEach(([key, value]) => {
+                        if (y > 270) { pdf.addPage(); y = 20; }
+                        pdf.setFontSize(11);
+                        pdf.setTextColor(80, 80, 80);
+                        pdf.text(key.replace(/([A-Z])/g, ' $1').trim(), 20, y);
+                        y += 6;
+                        pdf.setFontSize(10);
+                        pdf.setTextColor(60, 60, 60);
+                        const lines = pdf.splitTextToSize(String(value), 165);
+                        pdf.text(lines, 20, y);
+                        y += lines.length * 5 + 8;
+                      });
+                      pdf.save(`detection-report-${result.verificationId}.pdf`);
+                    }}
+                  >
                     Download Report (PDF)
                   </Button>
                   <Button variant="outline" className="flex-1 border-border text-foreground">
