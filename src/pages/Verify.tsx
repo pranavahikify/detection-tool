@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import axios from "axios";
 import { useDropzone } from "react-dropzone";
+import { jsPDF } from "jspdf";
 import { Upload, Link as LinkIcon, FileVideo, FileAudio, Image, FileText, X, CheckCircle2, AlertTriangle, XCircle, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
