@@ -427,9 +427,6 @@ export default function Verify() {
                   >
                     Download Report (PDF)
                   </Button>
-                  <Button variant="outline" className="flex-1 border-border text-foreground">
-                    Share Verification Certificate
-                  </Button>
                   <Button variant="ghost" onClick={resetForm} className="flex-1 text-muted-foreground">
                     Verify Another
                   </Button>
