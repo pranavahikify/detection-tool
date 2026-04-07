@@ -18,27 +18,42 @@ export default function Register() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    const isPreviewAuth = /lovableproject\.com|id-preview--/.test(window.location.hostname);
+
     if (!role) {
       toast.error("Please select your role");
       return;
     }
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          role: role,
+
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            role: role,
+          },
         },
-      },
-    });
-    setLoading(false);
-    if (error) {
-      toast.error(error.message);
-    } else {
+      });
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
       toast.success("Account created successfully! You can now sign in.");
       navigate("/login");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Sign up failed";
+      toast.error(
+        isPreviewAuth && /failed to fetch/i.test(message)
+          ? "Preview auth is failing right now. Please use the published app to sign up."
+          : message,
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
